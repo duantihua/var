@@ -87,3 +87,16 @@ auto children(T)(ref DOMEntity!T dom, string path) {
   
   return dom.children.filter!(c => c.name == path);
 }
+
+`
+<xml>
+<profile>
+	<task name="sues_openurp" workdir="~/db" host="localhost" execute_at="2022-12-31 16:00：00" stdout="${task_name}.out">
+	  <env name="database" value="sues"/>
+	  <env name="target_file" value="${task_name}_${execute_time}.dmp"/>
+	  <command>
+	    pg_dump --format=c -v --file=${target_file} $database
+	  </command>
+	</task>
+</profile>
+`
