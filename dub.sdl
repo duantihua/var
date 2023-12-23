@@ -1,0 +1,5 @@
+name "beangle-van"
+description "A File Transport Tool."
+authors "chaostone"
+license "GPLv3"
+version "0.0.1"
