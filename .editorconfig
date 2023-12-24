@@ -1,0 +1,19 @@
+root = true
+
+[*]
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace =true
+tab_width = 2
+
+[*.{d,js,scala,java,html,md,css,xml,ftl}]
+charset = utf-8
+
+# space indentation
+[*.{d,scala,java,js,json,xml,ftl}]
+indent_style = space
+indent_size = 2
+
+[*.d]
+dfmt_brace_style=otbs
+

@@ -3,3 +3,9 @@ description "A File Transport Tool."
 authors "chaostone"
 license "GPLv3"
 version "0.0.1"
+
+dependency "dxml" version = "~>0.4.4"
+
+targetType "executable"
+targetName "beangle-van"
+targetPath "target"
