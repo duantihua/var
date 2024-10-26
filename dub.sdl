@@ -1,11 +1,19 @@
-name "beangle-van"
-description "A File Transport Tool."
+name "beangle-task"
+description "Beangle Task"
 authors "chaostone"
 license "GPLv3"
 version "0.0.1"
 
-dependency "dxml" version = "~>0.4.4"
+dependency ":core" version="*"
+dependency ":server" version="*"
+dependency ":agent" version="*"
 
-targetType "executable"
-targetName "beangle-van"
+subPackage "core"
+subPackage "server"
+subPackage "agent"
+
+targetType "none"
 targetPath "target"
+
+sourceFiles "source/beangle/task/app.d"
+toolchainRequirements dub=">=1.34.0" frontend=">=2.105.0" ldc=">=1.35.0"

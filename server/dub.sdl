@@ -1,0 +1,11 @@
+name "server"
+description "Beangle Task Server"
+
+dependency "vibe-http" version="~>1.1.2"
+dependency "beangle-task:core" version = "*"
+dependency "vibe-stream:tls" version="~>1.1.0"
+subConfiguration "vibe-stream:tls" "notls"
+
+targetType "executable"
+targetName "beangle-task-server"
+targetPath "target"
