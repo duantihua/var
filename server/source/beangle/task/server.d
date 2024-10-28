@@ -18,18 +18,33 @@ import beangle.task.channel;
 private AgentChannel[string] agents;
 private AdminChannel[string] admins;
 
+import std.getopt;
+
 void start(string[] args){
-  /*if (args.length<2){
-    writeln("Usage: " ~ args[0] ~ " path/to/config.xml");
+  ushort port = 8989;
+  string contextPath="/sas";
+  string host="127.0.0.1";
+  bool help=false;
+
+  getopt(args, std.getopt.config.passThrough, "port|p", &port, "path", &contextPath, "host", &host, "help|h",&help);
+
+  if(help){
+    import std.stdio;
+    writeln("Usage: " ~ args[0] ~ " --port=8989 --path=/sas");
     return;
-  }*/
-  auto router = new URLRouter;
+  }
+  auto router = new URLRouter(contextPath);
   router.get("/", staticRedirect("/index.html"));
   router.get("/ws", handleWebSockets(&handleWebSocketConnection));
   router.get("*", serveStaticFiles("public/"));
-  auto settings = new HTTPServerSettings;
-  settings.port = 8989;
-  settings.bindAddresses = ["::1", "127.0.0.1"];
+
+  auto settings = new HTTPServerSettings(":8080");
+  settings.port = port;
+  if(host != "127.0.0.1"){
+    settings.bindAddresses = ["127.0.0.1", host];
+  }else{
+    settings.bindAddresses = ["127.0.0.1" ];
+  }
 
   auto listener = listenHTTP(settings, router);
   runApplication(&args);

@@ -70,6 +70,6 @@ function getBaseURL() {
     // Get the WebSocket server address e.g. ws://127.0.0.1:8080
 
     var href = window.location.href.substring(7); // strip "http://"
-    var idx = href.indexOf('/');
+    var idx = href.lastIndexOf('/');
     return 'ws://' + href.substring(0, idx);
 }
