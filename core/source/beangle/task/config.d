@@ -101,11 +101,11 @@ class Task {
   immutable string workdir;
   immutable string host;
 
-  immutable string[string] envs;
+  string[string] envs;
 
   immutable string stdout;
 
-  immutable string[] commands;
+  Commands commands;
   immutable DateTime beginAt;
   immutable DateTime endAt;
   immutable Duration repeat;
@@ -121,38 +121,30 @@ class Task {
       this.workdir = dir;
     }
     this.host = host;
-    this.envs = to!(immutable(string[string]))(envs);
+    this.envs = envs;
     auto cmd = commands.strip();
     foreach (k, v; envs){
       cmd = cmd.replace("${" ~ k ~ "}", v);
     }
-    this.commands = to!(immutable(string[])) (splitLines(cmd).map!(x=> strip(x)).filter!(x=> !x.empty && !startsWith(x, "#")).array());
+    this.commands = new Commands(cmd);
     this.beginAt = beginAt;
     this.endAt = endAt;
     this.repeat = repeat;
     this.stdout = stdout;
   }
 
-  int execute(){
+  int execute() {
     lastExecuteAt = now().toISOString();
-    import std.process;
     import std.file;
     mkdirRecurse(this.workdir);
-    foreach (command; commands){
-      auto cmd = executeShell(command, this.envs, std.process.Config.none, size_t.max, this.workdir);
-      if (cmd.status != 0) {
-        writeln("Failed to execute commands");
-        return cmd.status;
-      } else {
-        if (this.stdout is null){
-          writeln(cmd.output);
-        }else {
-          auto f = File(this.stdout, "w");
-          f.write(cmd.output);
-        }
-      }
+    auto results = this.commands.execute(this.envs,this.workdir);
+    if (this.stdout is null){
+      writeln(results[1]);
+    }else {
+      auto f = File(this.stdout, "w");
+      f.write(results[1]);
     }
-    return 0;
+    return results[0];
   }
 
   int execute(string command){
@@ -197,6 +189,31 @@ class Task {
 
 }
 
+class Commands{
+  const string[] lines;
+  this(string[] commands){
+    this.lines = commands;
+  }
+  this(string cmds){
+    this.lines = to!(immutable(string[])) (splitLines(cmds).map!(x=> strip(x)).filter!(x=> !x.empty && !startsWith(x, "#")).array());
+  }
+
+  auto execute(string[string] envs,string workdir){
+    import std.process;
+    import std.typecons;
+    import std.array : appender;
+    auto buf = appender!string();
+    foreach (command; lines){
+      auto cmd = executeShell(command, envs, std.process.Config.none, size_t.max, workdir);
+      if (cmd.status != 0) {
+        return tuple(cmd.status,cmd.output);
+      } else {
+        buf.put(cmd.output);
+      }
+    }
+    return tuple(0,buf.data);
+  }
+}
 public static Task parseTask(string contents){
   auto dom = parseDOM!simpleXML(`<?xml version="1.0" encoding="UTF-8"?>` ~ contents).children[0];
   return parseTask(dom);
@@ -204,7 +221,7 @@ public static Task parseTask(string contents){
 
 unittest{
   auto a  = parseTask(`<task name="ls" workdir="~/tmp" host="localhost" repeat="3 seconds" stdout="${task_name}.out"><commands>ls -alh;</commands></task>`);
-  assert(a.stdout == "${task_name}.out");
+  assert(a.stdout == "ls.out");
 }
 
 public static Task parseTask(T)(ref DOMEntity!T t){
@@ -299,3 +316,61 @@ unittest {
   writeln(profile.tasks["openurp"].commands);
   //config.tasks["openurp"].execute();
 }
+
+/**
+  Server settings for startup a sas task server.
+ */
+class ServerSetting{
+  string[] ips;
+  ushort port;
+  string path;
+  string secret;
+  string[string] agentSecrets;
+
+  this(string[] ips, ushort port, string path,string secret,string[string] agentSecrets) {
+    this.ips = ips;
+    this.port = port;
+    this.path = path;
+    this.secret = secret;
+    this.agentSecrets = agentSecrets;
+  }
+
+  public static ServerSetting parse(string content) {
+    import std.conv;
+
+    auto dom = parseDOM!simpleXML(content).children[0];
+    auto attrs = getAttrs(dom);
+    string hosts;
+    if ("ips" in attrs) {
+      hosts = attrs.get("ips", "127.0.0.1");
+    } else {
+      hosts = attrs.get("hosts", "127.0.0.1");
+    }
+    ushort port = attrs.get("port", "8080").to!ushort;
+    auto path = attrs.get("path", "/sas");
+    auto passwd = attrs.get("secret", "changeit");
+
+    import beangle.xml;
+    string[string] agentPasswds;
+    foreach(entry;children(dom, "agent")){
+      auto agentAttrs = getAttrs(entry);
+      agentPasswds[agentAttrs["name"]] = agentAttrs["secret"];
+    }
+    agentPasswds.rehash();
+    return new ServerSetting(split(hosts, ","), port, path, passwd, agentPasswds);
+  }
+}
+unittest {
+  auto content = `<?xml version="1.0" encoding="UTF-8"?>
+<sas host="localhost" port="8080" path="/sastask" secret="changeit">
+	<agent name="agent1" secret="agent_password1"/>
+	<agent name="agent2" secret="agent_password2"/>
+</sas>
+`;
+  auto setting = ServerSetting.parse(content);
+  assert(setting.agentPasswds.length == 2);
+  assert("agent2" in setting.agentSecrets);
+  assert("/sastask" == setting.path);
+  assert("changeit" == setting.secret);
+}
+

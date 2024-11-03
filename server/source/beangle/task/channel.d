@@ -3,6 +3,12 @@ import vibe.http.websockets : WebSocket;
 import beangle.task;
 import beangle.util;
 
+
+//name -> channel
+private AgentChannel[string] agents;
+//id -> channel
+private AdminChannel[string] admins;
+
 abstract class Channel{
 
   immutable string id;
@@ -24,8 +30,6 @@ abstract class Channel{
     }
   }
 
-  abstract void broadcast(string text);
-
   override string toString(){
     return name ~ "@" ~ id;
   }
@@ -33,68 +37,128 @@ abstract class Channel{
 
 class AdminChannel : Channel{
 
-  AgentChannel[] agents;
+  AgentChannel agent;
 
   static AdminChannel create(string name, WebSocket socket){
     return new AdminChannel(nextChannelId(name), name, socket);
   }
 
   this(string id, string name, WebSocket socket){
-    super(id,name,socket);
+    super(id, name, socket);
   }
 
-  void addAgent(AgentChannel agent){
-    agents ~= agent;
-  }
-
-  void removeAgent(AgentChannel agent){
-    removeFromArray(agents, agent);
+  void setAgent(AgentChannel agent){
+    this.agent = agent;
   }
 
   void purge(){
-    import std.algorithm;
-    import std.array;
-    auto offlines = this.agents.filter!(x=> !x.socket.connected).array();
-    if(offlines.length>0){
-      this.agents = this.agents.filter!(x=> x.socket.connected).array();
+    if (this.agent !is null && !this.agent.socket.connected){
+      this.agent = null;
     }
   }
 
-  override void broadcast(string text){
-    foreach (cl; this.agents) {
-      if (cl.socket.connected) {
-        cl.socket.send(text);
-      }
-    }
-  }
 }
 
 class AgentChannel : Channel {
+  //caller name -> caller
+  Caller[string] callers;
 
-  AdminChannel[] admins;
+  void invoke(Caller caller, string cmds){
+    callers[caller.getId()] = caller;
+    import std.json;
+    JSONValue jj = ["id":caller.getId()];
+    jj.object["commands"]=cmds;
+    send(jj.toString());
+  }
+
+  void reply(string text){
+    import std.json;
+    JSONValue js = parseJSON(text);
+    auto callId = js["id"].str;
+    auto data = js["data"].str;
+    auto caller = callId in callers;
+    if (caller !is null){
+      callers.remove(callId);
+      caller.callback(data);
+    }
+  }
 
   this(string id, string name, WebSocket socket){
-    super(id,name,socket);
+    super(id, name, socket);
   }
 
   static AgentChannel create(string name, WebSocket socket){
     return new AgentChannel(nextChannelId(name), name, socket);
   }
+}
 
-  void addAdmin(AdminChannel admin){
-    admins ~= admin;
+interface Caller{
+  void callback(string result);
+  string getId();
+}
+
+class SocketCaller : Caller{
+  WebSocket socket;
+  const string id;
+
+  this(string id, WebSocket socket){
+    this.id = id;
+    this.socket = socket;
   }
 
-  void removeAdmin(AdminChannel admin){
-    removeFromArray(admins, admin);
+  string getId(){
+    return id;
+  }
+  static SocketCaller create(AdminChannel channel){
+    import std.datetime;
+    auto id = Clock.currTime().toISOString() ~ "@" ~ channel.name;
+    return new SocketCaller(id, channel.socket);
   }
 
-  override void broadcast(string text){
-    foreach (cl; this.admins) {
-      if (cl.socket.connected) {
-        cl.socket.send(text);
-      }
+  override void callback(string result){
+    if (this.socket.connected) {
+      this.socket.send(result);
     }
   }
-
 }
+
+class WebCaller : Caller{
+  import vibe.core.sync;
+  string id;
+  InterruptibleTaskMutex m_readMutex;
+  InterruptibleTaskCondition m_readCondition;
+  string result;
+
+  this(){
+    import std.datetime;
+    this.id = Clock.currTime().toISOString() ~ "@web";
+  }
+
+  string getId(){
+    return id;
+  }
+
+  import core.time;
+
+  string invoke(AgentChannel agent, string commands, Duration timeout = 20.seconds){
+    m_readMutex = new InterruptibleTaskMutex;
+    m_readCondition = new InterruptibleTaskCondition(m_readMutex);
+
+    agent.invoke(this,commands);
+    m_readMutex.performLocked!({
+      m_readCondition.wait(timeout);
+    });
+    return result;
+  }
+
+  override void callback(string result){
+    import std.stdio;
+    if (result is null){
+      this.result = "null";
+    }else {
+      this.result = result;
+    }
+    m_readCondition.notify();
+  }
+}
+

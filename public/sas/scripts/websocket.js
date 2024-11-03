@@ -25,11 +25,10 @@ function connect(name) {
         socket.onmessage = function(msg) {
             //var msgVal = JSON.parse(msg.data); // We're anticipating messages formatted as "{'name':'Csmith1991', 'text':'example'}"
             var chatLog = document.getElementById('chatLog');
-
-            chatLog.innerHTML += '<p><pre>' + msg.data + '</pre></p>'; // Add to the chatLog
+            if(lastCommand) chatLog.innerHTML += ('<pre style="background-color:lightgray">' + lastCommand + '</pre>'); // Add to the chatLog
+            chatLog.innerHTML += ('<pre>' + msg.data + '</pre>'); // Add to the chatLog
             //chatLog.innerHTML += '<p>' + msgVal.name + ': ' + msgVal.text + '</p>'; // Add to the chatLog
             chatLog.scrollTop = chatLog.scrollHeight; // Scroll chatLog to bottom
-
         }
         socket.onclose = function() {
             socket = {}; // Remove socket connection
@@ -52,9 +51,11 @@ function startConnection(event) {
     }
 }
 
+var lastCommand="";
 function chat(event) {
     if (event.which === 13 || event.keyCode === 13 ) {
         var myObj = document.getElementById('text');
+        lastCommand = myObj.value;
         socket.send(myObj.value);
         myObj.value = '';
         myObj.focus();
@@ -68,7 +69,6 @@ function endConnection() {
 
 function getBaseURL() {
     // Get the WebSocket server address e.g. ws://127.0.0.1:8080
-
     var href = window.location.href.substring(7); // strip "http://"
     var idx = href.lastIndexOf('/');
     return 'ws://' + href.substring(0, idx);
